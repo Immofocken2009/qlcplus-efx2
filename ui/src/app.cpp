@@ -54,6 +54,7 @@
 #include "qlcconfig.h"
 #include "qlcfile.h"
 #include "apputil.h"
+#include "efxlibrary.h"
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -545,6 +546,11 @@ void App::initDoc()
 
     m_doc->inputOutputMap()->startUniverses();
     m_doc->masterTimer()->start();
+
+    /* Load EFX 2.0 effect library and enable hot-reload */
+    EFXLibrary::instance()->load(EFXLibrary::systemDirectory(), false);
+    EFXLibrary::instance()->load(EFXLibrary::userDirectory(), true);
+    EFXLibrary::instance()->setWatching(true);
 }
 
 void App::slotDocModified(bool state)
