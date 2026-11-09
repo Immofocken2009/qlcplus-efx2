@@ -55,6 +55,7 @@
 #include "qlcfile.h"
 #include "apputil.h"
 #include "efxlibrary.h"
+#include "simulatorsettingsdialog.h"
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -777,6 +778,11 @@ void App::initActions()
     m_helpAboutAction = new QAction(QIcon(":/qlcplus.png"), tr("&About QLC+"), this);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpAbout()));
 
+    m_simulatorSettingsAction = new QAction(tr("Simulator..."), this);
+    m_simulatorSettingsAction->setToolTip(tr("Moving-Head-Simulator verbinden"));
+    connect(m_simulatorSettingsAction, &QAction::triggered,
+            this, &App::slotSimulatorSettings);
+
     if (QLCFile::hasWindowManager() == false)
     {
         m_quitAction = new QAction(QIcon(":/exit.png"), tr("Quit QLC+"), this);
@@ -804,6 +810,8 @@ void App::initToolBar()
     m_toolbar->addAction(m_controlFullScreenAction);
     m_toolbar->addAction(m_helpIndexAction);
     m_toolbar->addAction(m_helpAboutAction);
+    m_toolbar->addSeparator();
+    m_toolbar->addAction(m_simulatorSettingsAction);
     if (QLCFile::hasWindowManager() == false)
         m_toolbar->addAction(m_quitAction);
 
@@ -1294,6 +1302,12 @@ void App::slotHelpAbout()
 {
     AboutBox ab(this);
     ab.exec();
+}
+
+void App::slotSimulatorSettings()
+{
+    SimulatorSettingsDialog dlg(this);
+    dlg.exec();
 }
 
 void App::slotRecentFileClicked(QAction *recent)

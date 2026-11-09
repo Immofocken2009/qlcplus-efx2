@@ -40,6 +40,19 @@
 #include "efxeffect.h"
 #include "fixture.h"
 #include "doc.h"
+#include "simulatorclient.h"
+#include "efxlibrary.h"
+
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QHeaderView>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QFormLayout>
+#include <QPushButton>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
 
 #define SETTINGS_GEOMETRY "efxeditor/geometry"
 
@@ -78,6 +91,7 @@ EFXEditor::EFXEditor(QWidget* parent, EFX* efx, Doc* doc)
 
     initGeneralPage();
     initMovementPage();
+    initSimulatorTab();
 
     QVariant tabIndex = efx->uiStateValue(UI_STATE_TAB_INDEX);
     if (tabIndex.isNull())
@@ -1069,5 +1083,298 @@ void EFXEditor::redrawPreview()
     m_previewArea->setFixturePolygons(fixturePoints);
 
     m_previewArea->draw(m_efx->duration() / polygon.size());
+}
+
+/***********************************************************************
+ * Simulator tab
+ ***********************************************************************/
+
+void EFXEditor::initSimulatorTab()
+{
+    SimulatorClient *sim = SimulatorClient::instance();
+
+    m_simTab = new QWidget(this);
+    m_tab->addTab(m_simTab, tr("Simulator"));
+
+    // --- Scenario row ---
+    m_simScenario = new QComboBox(m_simTab);
+    auto *refreshBtn = new QPushButton(tr("↻"), m_simTab);
+    refreshBtn->setFixedWidth(28);
+    refreshBtn->setToolTip(tr("Szenarien laden"));
+
+    auto *scenRow = new QHBoxLayout;
+    scenRow->addWidget(m_simScenario, 1);
+    scenRow->addWidget(refreshBtn);
+
+    // --- Fixture → Spot mapping table ---
+    m_simMapping = new QTableWidget(0, 2, m_simTab);
+    m_simMapping->setHorizontalHeaderLabels({tr("Fixture"), tr("Spot")});
+    m_simMapping->horizontalHeader()->setStretchLastSection(true);
+    m_simMapping->verticalHeader()->setVisible(false);
+    m_simMapping->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_simMapping->setSelectionMode(QAbstractItemView::NoSelection);
+
+    // Populate mapping rows from current EFX fixtures
+    for (EFXFixture *ef : m_efx->fixtures())
+    {
+        Fixture *fxi = m_doc->fixture(ef->head().fxi);
+        int row = m_simMapping->rowCount();
+        m_simMapping->insertRow(row);
+        QString name = fxi ? fxi->name() : tr("Fixture %1").arg(ef->head().fxi);
+        m_simMapping->setItem(row, 0, new QTableWidgetItem(name));
+        auto *combo = new QComboBox;
+        combo->addItem(tr("(nicht zugeordnet)"), -1);
+        m_simMapping->setCellWidget(row, 1, combo);
+        combo->setProperty("efx_row", row);
+        connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                [this, row](int) { slotSimulatorSpotChanged(row, 1); });
+    }
+
+    // --- Options row ---
+    m_simSamples = new QSpinBox(m_simTab);
+    m_simSamples->setRange(8, 512);
+    m_simSamples->setValue(64);
+    m_simSamples->setSuffix(tr(" Punkte"));
+
+    auto *form = new QFormLayout;
+    form->addRow(tr("Szenario:"), scenRow);
+    form->addRow(tr("Auflösung:"), m_simSamples);
+
+    // --- Calculate button + status ---
+    m_simCalcBtn = new QPushButton(tr("Berechne via Simulator"), m_simTab);
+    m_simCalcBtn->setEnabled(false);
+    m_simStatus  = new QLabel(m_simTab);
+    m_simStatus->setWordWrap(true);
+
+    auto *layout = new QVBoxLayout(m_simTab);
+    layout->addLayout(form);
+    layout->addWidget(m_simMapping, 1);
+    layout->addWidget(m_simCalcBtn);
+    layout->addWidget(m_simStatus);
+
+    // --- Connections ---
+    connect(refreshBtn, &QPushButton::clicked,
+            this, &EFXEditor::slotSimulatorRefreshScenarios);
+    connect(m_simScenario, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &EFXEditor::slotSimulatorScenarioChanged);
+    connect(m_simCalcBtn, &QPushButton::clicked,
+            this, &EFXEditor::slotSimulatorCalculate);
+
+    connect(sim, &SimulatorClient::scenariosFetched,
+            this, &EFXEditor::slotSimulatorScenariosReceived);
+    connect(sim, &SimulatorClient::spotsFetched,
+            this, &EFXEditor::slotSimulatorSpotsReceived);
+    connect(sim, &SimulatorClient::fxCalculated,
+            this, &EFXEditor::slotSimulatorFXReceived);
+    connect(sim, &SimulatorClient::requestFailed,
+            this, &EFXEditor::slotSimulatorError);
+}
+
+void EFXEditor::slotSimulatorRefreshScenarios()
+{
+    m_simScenario->clear();
+    m_simStatus->setText(tr("Lade Szenarien..."));
+    SimulatorClient::instance()->fetchScenarios();
+}
+
+void EFXEditor::slotSimulatorScenariosReceived(const QJsonArray &scenarios)
+{
+    m_simScenario->clear();
+    for (const QJsonValue &v : scenarios)
+    {
+        QJsonObject sc = v.toObject();
+        QString label = sc.value("scenario_name").toString();
+        if (sc.value("is_production").toBool())
+            label += tr(" [Produktion]");
+        m_simScenario->addItem(label, sc.value("scenario_id").toInt());
+    }
+    m_simStatus->setText(tr("%1 Szenario(s) geladen.").arg(scenarios.count()));
+}
+
+void EFXEditor::slotSimulatorScenarioChanged(int index)
+{
+    if (index < 0) return;
+    m_simScenarioId = m_simScenario->itemData(index).toInt();
+    m_simCalcBtn->setEnabled(false);
+    m_simStatus->setText(tr("Lade Spots..."));
+    SimulatorClient::instance()->fetchSpots(m_simScenarioId);
+}
+
+void EFXEditor::slotSimulatorSpotsReceived(int scenarioId, const QJsonArray &spots)
+{
+    if (scenarioId != m_simScenarioId) return;
+    m_simSpots = spots;
+
+    // Rebuild spot combos in mapping table
+    for (int row = 0; row < m_simMapping->rowCount(); ++row)
+    {
+        auto *combo = qobject_cast<QComboBox *>(m_simMapping->cellWidget(row, 1));
+        if (!combo) continue;
+        combo->clear();
+        combo->addItem(tr("(nicht zugeordnet)"), -1);
+        for (const QJsonValue &v : spots)
+        {
+            QJsonObject sp = v.toObject();
+            combo->addItem(sp.value("name").toString(), sp.value("id").toInt());
+        }
+        // Auto-assign by index if only one spot
+        if (spots.count() == 1) combo->setCurrentIndex(1);
+    }
+    m_simCalcBtn->setEnabled(m_simMapping->rowCount() > 0 && spots.count() > 0);
+    m_simStatus->setText(tr("%1 Spot(s) gefunden.").arg(spots.count()));
+}
+
+void EFXEditor::slotSimulatorSpotChanged(int /*row*/, int /*column*/) {}
+
+void EFXEditor::slotSimulatorCalculate()
+{
+    if (m_simScenarioId < 0) return;
+
+    // Build fixtures array from mapping table
+    QJsonArray fixtures;
+    const QList<EFXFixture *> &efxFixtures = m_efx->fixtures();
+    for (int row = 0; row < m_simMapping->rowCount() && row < efxFixtures.count(); ++row)
+    {
+        auto *combo = qobject_cast<QComboBox *>(m_simMapping->cellWidget(row, 1));
+        if (!combo) continue;
+        int spotId = combo->currentData().toInt();
+        if (spotId < 0) continue; // not mapped
+
+        quint32 fxiId = efxFixtures[row]->head().fxi;
+        QJsonObject fi;
+        fi["spot_id"]        = spotId;
+        fi["qlc_fixture_id"] = QString::number(fxiId);
+        fixtures.append(fi);
+    }
+
+    if (fixtures.isEmpty())
+    {
+        m_simStatus->setText(tr("Kein Fixture einem Spot zugeordnet."));
+        return;
+    }
+
+    // Sample the EFX path as normalized XY movements (t = 0..1)
+    QPolygonF polygon;
+    m_efx->preview(polygon);
+
+    QJsonArray movements;
+    int total = polygon.size();
+    if (total < 2) { m_simStatus->setText(tr("Kein Pfad vorhanden.")); return; }
+
+    for (int i = 0; i < total; ++i)
+    {
+        double t = (double)i / (total - 1);
+        // preview() returns points in range 0..255, normalize to 0..1
+        double x = polygon[i].x() / 255.0;
+        double y = polygon[i].y() / 255.0;
+        x = qBound(0.0, x, 1.0);
+        y = qBound(0.0, y, 1.0);
+        QJsonObject mv;
+        mv["t"] = t;
+        mv["x"] = x;
+        mv["y"] = y;
+        movements.append(mv);
+    }
+
+    QJsonObject body;
+    body["api_version"]  = "1";
+    body["hall_id"]      = m_simScenarioId;
+    body["fixtures"]     = fixtures;
+    body["movements"]    = movements;
+    body["coord_system"] = "normalized";
+
+    m_simCalcBtn->setEnabled(false);
+    m_simStatus->setText(tr("Berechne..."));
+    SimulatorClient::instance()->calculateFX(body);
+}
+
+void EFXEditor::slotSimulatorFXReceived(const QJsonObject &result)
+{
+    m_simCalcBtn->setEnabled(true);
+
+    QJsonArray results = result.value("results").toArray();
+    if (results.isEmpty())
+    {
+        m_simStatus->setText(tr("Simulator gab keine Ergebnisse zurück."));
+        return;
+    }
+
+    // Build a keyframe-based EFX JSON effect and add it to the library
+    // Format follows EFX-JSON-DESIGN.md: effect with "keyframes" per channel binding
+    for (const QJsonValue &rv : results)
+    {
+        QJsonObject r = rv.toObject();
+        QString qlcId = r.value("qlc_fixture_id").toString();
+        QJsonArray kfs = r.value("keyframes").toArray();
+
+        // Create a unique effect id: "sim-<scenarioId>-spot<spotId>"
+        QString effectId = QString("sim-%1-spot%2")
+            .arg(m_simScenarioId).arg(r.value("spot_id").toInt());
+
+        // Build EFX JSON effect with raw pan/tilt keyframes
+        QJsonArray panKfs, tiltKfs;
+        for (const QJsonValue &kv : kfs)
+        {
+            QJsonObject kf = kv.toObject();
+            if (kf.value("unreachable").toBool()) continue;
+            double t   = kf.value("t").toDouble();
+            int pan16  = kf.value("pan").toInt();
+            int tilt16 = kf.value("tilt").toInt();
+            // Normalize 16-bit (0..65535) to 0..1
+            panKfs.append(QJsonObject{{"t", t}, {"v", pan16 / 65535.0}});
+            tiltKfs.append(QJsonObject{{"t", t}, {"v", tilt16 / 65535.0}});
+        }
+
+        QJsonObject effect;
+        effect["id"]      = effectId;
+        effect["version"] = 1;
+        effect["name"]    = QString("Sim %1 – %2")
+            .arg(r.value("spot_name").toString()).arg(m_efx->name());
+        effect["params"]  = QJsonArray();
+
+        QJsonArray channels;
+        // Pan channel binding
+        QJsonObject panCh;
+        panCh["type"]      = "pan";
+        panCh["keyframes"] = panKfs;
+        channels.append(panCh);
+        // Tilt channel binding
+        QJsonObject tiltCh;
+        tiltCh["type"]      = "tilt";
+        tiltCh["keyframes"] = tiltKfs;
+        channels.append(tiltCh);
+
+        effect["channels"] = channels;
+
+        // Add to user library (in-memory + written to ~/.qlcplus/effects/)
+        QByteArray effectBytes = QJsonDocument(effect).toJson(QJsonDocument::Compact);
+        EFXLibrary::instance()->addUserEffect(effectBytes);
+
+        // Apply to the EFX if only one result
+        if (results.count() == 1)
+            m_efx->setEffect(effectId);
+    }
+
+    // Refresh algorithm combo
+    m_effectIds.clear();
+    m_algorithmCombo->clear();
+    for (const EFXEffectPtr &e : EFXLibrary::instance()->effects())
+    {
+        m_algorithmCombo->addItem(e->name());
+        m_effectIds.append(e->id());
+    }
+    int idx = m_effectIds.indexOf(m_efx->effectId());
+    if (idx >= 0) m_algorithmCombo->setCurrentIndex(idx);
+
+    m_simStatus->setText(tr("✓ %1 Effekt(e) berechnet und übernommen.")
+                             .arg(results.count()));
+    redrawPreview();
+}
+
+void EFXEditor::slotSimulatorError(const QString &message)
+{
+    m_simCalcBtn->setEnabled(true);
+    m_simStatus->setText(
+        QString("<font color='red'>%1</font>").arg(message));
 }
 

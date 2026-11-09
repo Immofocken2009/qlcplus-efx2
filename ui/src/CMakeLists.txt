@@ -49,6 +49,8 @@ add_library(${module_name}
     dmxdumpfactory.cpp dmxdumpfactory.h dmxdumpfactory.ui
     efxeditor.cpp efxeditor.h efxeditor.ui
     efxpreviewarea.cpp efxpreviewarea.h
+    simulatorclient.cpp simulatorclient.h
+    simulatorsettingsdialog.cpp simulatorsettingsdialog.h
     fixtureconsole.cpp fixtureconsole.h
     fixturegroupeditor.cpp fixturegroupeditor.h fixturegroupeditor.ui
     fixturemanager.cpp fixturemanager.h
@@ -164,6 +166,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt${QT_MAJOR_VERSION}::Gui
     Qt${QT_MAJOR_VERSION}::Multimedia
     Qt${QT_MAJOR_VERSION}::MultimediaWidgets
+    Qt${QT_MAJOR_VERSION}::Network
     Qt${QT_MAJOR_VERSION}::Widgets
     qlcplusengine
 )

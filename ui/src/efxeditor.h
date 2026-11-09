@@ -20,10 +20,17 @@
 #ifndef EFXEDITOR_H
 #define EFXEDITOR_H
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QPolygon>
 #include <QWidget>
 #include <QFrame>
 #include <QTimer>
+#include <QLabel>
+#include <QSpinBox>
+#include <QComboBox>
+#include <QTableWidget>
+#include <QPushButton>
 
 #include "ui_efxeditor.h"
 #include "efx.h"
@@ -180,6 +187,32 @@ private:
 
 private:
     void redrawPreview();
+
+    /*********************************************************************
+     * Simulator tab
+     *********************************************************************/
+private:
+    void initSimulatorTab();
+
+private slots:
+    void slotSimulatorRefreshScenarios();
+    void slotSimulatorScenarioChanged(int index);
+    void slotSimulatorSpotChanged(int row, int column);
+    void slotSimulatorCalculate();
+    void slotSimulatorScenariosReceived(const QJsonArray &scenarios);
+    void slotSimulatorSpotsReceived(int scenarioId, const QJsonArray &spots);
+    void slotSimulatorFXReceived(const QJsonObject &result);
+    void slotSimulatorError(const QString &message);
+
+private:
+    QWidget      *m_simTab       = nullptr;
+    QComboBox    *m_simScenario  = nullptr;
+    QTableWidget *m_simMapping   = nullptr;   // rows: EFX fixtures; cols: name, spot combo
+    QSpinBox     *m_simSamples   = nullptr;
+    QPushButton  *m_simCalcBtn   = nullptr;
+    QLabel       *m_simStatus    = nullptr;
+    int           m_simScenarioId = -1;
+    QJsonArray    m_simSpots;                  // spots of current scenario
 };
 
 /** @} */

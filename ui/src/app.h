@@ -178,6 +178,7 @@ public slots:
 
     void slotHelpIndex();
     void slotHelpAbout();
+    void slotSimulatorSettings();
 
     void slotRecentFileClicked(QAction *recent);
 
@@ -199,6 +200,7 @@ private:
 
     QAction* m_helpIndexAction;
     QAction* m_helpAboutAction;
+    QAction* m_simulatorSettingsAction;
     QAction* m_quitAction;
     QMenu* m_fileOpenMenu;
     QMenu* m_fadeAndStopMenu;
