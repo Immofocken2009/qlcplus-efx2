@@ -27,6 +27,7 @@
 
 #include "ui_efxeditor.h"
 #include "efx.h"
+#include "efxlibrary.h"
 #include "doc.h"
 
 class SpeedDialWidget;
@@ -166,6 +167,16 @@ private:
     /* Dimmer envelope widgets, created at runtime and added to the
        parameters group, gated by the dimmer control checkbox */
     QCheckBox *m_dimmerControlCheck = nullptr;
+
+    QStringList m_effectIds; // parallel to m_algorithmCombo entries
+
+    bool hasEffectParam(const QString &id) const
+    {
+        if (!m_efx || !m_efx->hasEffect()) return false;
+        for (const auto &p : m_efx->effect()->params())
+            if (p.id == id) return true;
+        return false;
+    }
 
 private:
     void redrawPreview();

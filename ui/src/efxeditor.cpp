@@ -37,6 +37,7 @@
 #include "speeddialwidget.h"
 #include "efxpreviewarea.h"
 #include "efxeditor.h"
+#include "efxeffect.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -200,21 +201,16 @@ void EFXEditor::initMovementPage()
     m_previewFrame->layout()->setContentsMargins(0, 0, 0, 0);
     m_previewFrame->layout()->addWidget(m_previewArea);
 
-    /* Get supported algorithms and fill the algorithm combo with them */
-    m_algorithmCombo->addItems(EFX::algorithmList());
-
-    QString algo(EFX::algorithmToString(m_efx->algorithm()));
-    int algoIndex = 0;
-    /* Select the EFX's algorithm from the algorithm combo */
-    for (int i = 0; i < m_algorithmCombo->count(); i++)
+    /* Fill the algorithm combo from the EFXLibrary */
+    m_effectIds.clear();
+    for (const EFXEffectPtr &e : EFXLibrary::instance()->effects())
     {
-        if (m_algorithmCombo->itemText(i) == algo)
-        {
-            m_algorithmCombo->setCurrentIndex(i);
-            algoIndex = i;
-            break;
-        }
+        m_algorithmCombo->addItem(e->name());
+        m_effectIds.append(e->id());
     }
+    int algoIndex = m_effectIds.indexOf(m_efx->effectId());
+    if (algoIndex < 0) algoIndex = 0;
+    m_algorithmCombo->setCurrentIndex(algoIndex);
 
     /* Causes the EFX function to update the preview point array */
     slotAlgorithmSelected(algoIndex);
@@ -228,10 +224,10 @@ void EFXEditor::initMovementPage()
     m_startOffsetSpin->setValue(m_efx->startOffset());
     m_isRelativeCheckbox->setChecked(m_efx->isRelative());
 
-    m_xFrequencySpin->setValue(m_efx->xFrequency());
-    m_yFrequencySpin->setValue(m_efx->yFrequency());
-    m_xPhaseSpin->setValue(m_efx->xPhase());
-    m_yPhaseSpin->setValue(m_efx->yPhase());
+    m_xFrequencySpin->setValue((int)m_efx->effectParam("xFrequency"));
+    m_yFrequencySpin->setValue((int)m_efx->effectParam("yFrequency"));
+    m_xPhaseSpin->setValue((int)m_efx->effectParam("xPhase"));
+    m_yPhaseSpin->setValue((int)m_efx->effectParam("yPhase"));
 
     /* Dimmer control. A single checkbox, not in the .ui file: when enabled the
        EFX drives each fixture's dimmer from its own tilt (full at maximum tilt,
@@ -918,41 +914,20 @@ void EFXEditor::slotAlgorithmSelected(int algoIndex)
 {
     Q_ASSERT(m_efx != NULL);
 
-    m_efx->setAlgorithm(EFX::Algorithm(algoIndex));
+    if (algoIndex >= 0 && algoIndex < m_effectIds.size())
+        m_efx->setEffect(m_effectIds[algoIndex]);
 
-    if (m_efx->isFrequencyEnabled())
-    {
-        m_xFrequencyLabel->setEnabled(true);
-        m_yFrequencyLabel->setEnabled(true);
+    bool hasFreq = hasEffectParam("xFrequency");
+    m_xFrequencyLabel->setEnabled(hasFreq);
+    m_yFrequencyLabel->setEnabled(hasFreq);
+    m_xFrequencySpin->setEnabled(hasFreq);
+    m_yFrequencySpin->setEnabled(hasFreq);
 
-        m_xFrequencySpin->setEnabled(true);
-        m_yFrequencySpin->setEnabled(true);
-    }
-    else
-    {
-        m_xFrequencyLabel->setEnabled(false);
-        m_yFrequencyLabel->setEnabled(false);
-
-        m_xFrequencySpin->setEnabled(false);
-        m_yFrequencySpin->setEnabled(false);
-    }
-
-    if (m_efx->isPhaseEnabled())
-    {
-        m_xPhaseLabel->setEnabled(true);
-        m_yPhaseLabel->setEnabled(true);
-
-        m_xPhaseSpin->setEnabled(true);
-        m_yPhaseSpin->setEnabled(true);
-    }
-    else
-    {
-        m_xPhaseLabel->setEnabled(false);
-        m_yPhaseLabel->setEnabled(false);
-
-        m_xPhaseSpin->setEnabled(false);
-        m_yPhaseSpin->setEnabled(false);
-    }
+    bool hasPhase = hasEffectParam("xPhase");
+    m_xPhaseLabel->setEnabled(hasPhase);
+    m_yPhaseLabel->setEnabled(hasPhase);
+    m_xPhaseSpin->setEnabled(hasPhase);
+    m_yPhaseSpin->setEnabled(hasPhase);
 
     redrawPreview();
 }
@@ -1008,28 +983,28 @@ void EFXEditor::slotYOffsetSpinChanged(int value)
 void EFXEditor::slotXFrequencySpinChanged(int value)
 {
     Q_ASSERT(m_efx != NULL);
-    m_efx->setXFrequency(value);
+    m_efx->setEffectParam("xFrequency", value);
     redrawPreview();
 }
 
 void EFXEditor::slotYFrequencySpinChanged(int value)
 {
     Q_ASSERT(m_efx != NULL);
-    m_efx->setYFrequency(value);
+    m_efx->setEffectParam("yFrequency", value);
     redrawPreview();
 }
 
 void EFXEditor::slotXPhaseSpinChanged(int value)
 {
     Q_ASSERT(m_efx != NULL);
-    m_efx->setXPhase(value);
+    m_efx->setEffectParam("xPhase", value);
     redrawPreview();
 }
 
 void EFXEditor::slotYPhaseSpinChanged(int value)
 {
     Q_ASSERT(m_efx != NULL);
-    m_efx->setYPhase(value);
+    m_efx->setEffectParam("yPhase", value);
     redrawPreview();
 }
 

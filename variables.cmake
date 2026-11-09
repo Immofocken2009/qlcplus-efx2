@@ -55,12 +55,16 @@ endif()
 # when building qmlui. Resources (fixtures, rgbscripts, gobos, ...) are
 # deliberately left unsuffixed, since they are shared between the two.
 # -Dqlc6=on builds the EFX-2.0 fork as qlcplus6, installable alongside qlcplus/qlcplus5.
-if(qlc6)
+if(qlc6 AND qmlui)
     add_definitions(-DQMLUI)
-    set(qmlui ON)
     set(APPVERSION "6.0.0")
     set(APPBINARY "qlcplus6")
     set(PLUGINSUBDIR "qlcplus6")
+elseif(qlc6)
+    # Widgets UI variant with EFX 2.0 engine (no qmlui)
+    set(APPVERSION "6.0.0")
+    set(APPBINARY "qlcplus6w")
+    set(PLUGINSUBDIR "qlcplus6w")
 elseif(qmlui)
     add_definitions(-DQMLUI)
     set(APPVERSION "5.4.0")
