@@ -1,0 +1,10 @@
+qlcplus (6.0.0) stable; urgency=low
+
+  * EFX 2.0 rewrite: JSON-based effect library (keyframes, Bezier paths,
+    arbitrary channel bindings, expression language)
+  * Phase 7: HTTP upload API for external effect generators
+    (POST /api/v1/effects, PUT /api/v1/effects/<id>)
+  * Phase 8a: Visual path editor QML (EFXPathEditor)
+  * Installs as qlcplus6, parallel to qlcplus and qlcplus5
+
+ -- Immo Focken <Immo.focken@web.de>  Mon, 09 Nov 2026 16:00:00 +0000

@@ -1,7 +1,12 @@
 qlcplus/
 qlcplus-dbg/
+qlcplus5/
+qlcplus5-dbg/
+qlcplus6/
+qlcplus6-dbg/
 tmp/
 *.log
 *.debhelper
 *.substvars
 files
+debhelper-build-stamp
