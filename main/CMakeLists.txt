@@ -4,6 +4,8 @@ add_executable(${module_name} WIN32
     main.cpp
 )
 
+set_target_properties(${module_name} PROPERTIES OUTPUT_NAME ${APPBINARY})
+
 target_include_directories(${module_name} PRIVATE
     ../engine/src
     ../ui/src
